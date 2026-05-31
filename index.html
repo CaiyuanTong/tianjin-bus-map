@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+<title>天津班车站点标注图（手机版）</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+#map { position: fixed; inset: 0; }
+.topbar {
+  position: fixed; top: 10px; left: 10px; right: 10px; z-index: 1000;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+}
+.btn {
+  background: rgba(255,255,255,0.96); border: 1px solid rgba(0,0,0,0.12); border-radius: 12px;
+  padding: 10px 12px; font-size: 14px; font-weight: 600; color: #222; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+.btn.small { padding: 8px 10px; font-size: 13px; }
+.badge {
+  background: rgba(255,255,255,0.95); border-radius: 12px; padding: 10px 12px; font-size: 13px;
+  border: 1px solid rgba(0,0,0,0.1); box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+.panel {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 1001;
+  background: #fff; border-radius: 18px 18px 0 0; box-shadow: 0 -6px 24px rgba(0,0,0,0.18);
+  max-height: 72vh; transform: translateY(calc(100% - 58px)); transition: transform .25s ease;
+}
+.panel.open { transform: translateY(0); }
+.panel-header { padding: 10px 16px 6px; cursor: pointer; }
+.handle { width: 42px; height: 5px; background: #ccc; border-radius: 999px; margin: 0 auto 8px; }
+.panel-title { font-weight: 700; font-size: 16px; color: #222; }
+.panel-subtitle { font-size: 12px; color: #666; margin-top: 4px; }
+.panel-content { padding: 0 16px 16px; overflow: auto; max-height: calc(72vh - 58px); }
+.section-title { font-size: 14px; font-weight: 700; margin: 14px 0 8px; }
+.legend-item { display:flex; align-items:center; gap:8px; padding:5px 0; font-size:13px; }
+.legend-dot { width:12px; height:12px; border-radius:50%; display:inline-block; flex:0 0 12px; }
+.info-card { background:#fafafa; border:1px solid #eee; border-radius:12px; padding:10px 12px; font-size:12px; line-height:1.6; color:#555; }
+.station-list { display:flex; flex-direction:column; gap:8px; }
+.station-item { background:#fafafa; border:1px solid #eee; border-radius:12px; padding:10px 12px; font-size:13px; }
+.station-item .meta { font-size:12px; color:#666; margin-top:4px; line-height:1.5; }
+.filter-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+.chip { border:1px solid #ddd; border-radius:999px; padding:6px 10px; font-size:12px; background:#fff; }
+.station-label {
+  background: rgba(255,255,255,0.92); border: 1px solid rgba(0,0,0,0.16); border-radius: 3px; box-shadow: none;
+  color: #111; font-size: 11px; font-weight: 600; padding: 1px 4px; white-space: nowrap;
+}
+.leaflet-tooltip.station-label:before { display:none; }
+.ctl-label {
+  background: rgba(255,248,205,0.98); border: 1px solid #666; border-radius: 3px; box-shadow: none;
+  color: #000; font-size: 12px; font-weight: 700; padding: 1px 5px; white-space: nowrap;
+}
+.leaflet-tooltip.ctl-label:before { display:none; }
+.leaflet-popup-content { font-size: 13px; line-height: 1.55; }
+@media (min-width: 860px) {
+  .topbar { left: 16px; right: auto; width: auto; max-width: calc(100vw - 420px); }
+  .panel { left: auto; width: 380px; right: 12px; top: 12px; bottom: 12px; border-radius: 18px; max-height: none; transform: none; }
+  .panel-header .handle { display:none; }
+  .panel-content { max-height: calc(100vh - 110px); }
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="topbar">
+  <button class="btn" id="togglePanelBtn">展开信息面板</button>
+  <button class="btn small" id="toggleLabelsBtn">隐藏站点名称</button>
+  <button class="btn small" id="fitBtn">全图显示</button>
+  <div class="badge">手机版 · 可缩放拖动 · 点站点看详情</div>
+</div>
+<div class="panel" id="panel">
+  <div class="panel-header" id="panelHeader">
+    <div class="handle"></div>
+    <div class="panel-title">天津班车站点标注图</div>
+    <div class="panel-subtitle">已包含车牌号、CTL终点、站点标签</div>
+  </div>
+  <div class="panel-content">
+    <div class="info-card">
+      本图依据《班车路线表》整理，并按你的补充把 <b>CTL</b> 作为统一终点站（卡特彼勒〈天津〉有限公司）。<br>
+      手机上可直接打开使用：可拖动、缩放、点击站点查看线路、车牌号、到站时间等信息。<br>
+      若觉得标签太密，可点击顶部“隐藏站点名称”。
+    </div>
+    <div class="section-title">CTL 终点</div>
+    <div class="info-card"><b>CTL（卡特彼勒<天津>有限公司）</b><br>中国天津市东丽区中新大道55号附近（近似定位）<br>时间：7:50</div>
+    <div class="section-title">路线图例</div>
+    <div><div class='legend-item'><span class='legend-dot' style='background:#d73027'></span><span>Route 1（津AZ5735）</span></div><div class='legend-item'><span class='legend-dot' style='background:#fc8d59'></span><span>Route 2（津AX6166）</span></div><div class='legend-item'><span class='legend-dot' style='background:#1a9850'></span><span>Route 3（津AZ9331）</span></div><div class='legend-item'><span class='legend-dot' style='background:#4575b4'></span><span>Route 4（津AZ5729）</span></div><div class='legend-item'><span class='legend-dot' style='background:#7b3294'></span><span>Route 5（津AX6133）</span></div><div class='legend-item'><span class='legend-dot' style='background:#4d908e'></span><span>Route 6（津AZ9383）</span></div><div class='legend-item'><span class='legend-dot' style='background:#8c1d18'></span><span>Route 7（津AZ5683）</span></div><div class='legend-item'><span class='legend-dot' style='background:#2b9348'></span><span>Route 8（津AZ5736）</span></div><div class='legend-item'><span class='legend-dot' style='background:#6a4c93'></span><span>Route 汉沽（津AZ5781）</span></div><div class='legend-item'><span class='legend-dot' style='background:#277da1'></span><span>Route 塘沽（津AZ5728）</span></div><div class='legend-item'><span class='legend-dot' style='background:#f8961e'></span><span>Route 开发区（津AZ5685）</span></div><div class='legend-item'><span class='legend-dot' style='background:#222222'></span><span>Route 空港华明（津AZ5662）</span></div></div>
+    <div class="section-title">快速筛选</div>
+    <div class="filter-row" id="routeChips"></div>
+    <div class="section-title">站点清单</div>
+    <div class="station-list" id="stationList"></div>
+  </div>
+</div>
+<script>
+const stationData = [{"route": "Route 1", "station": "金冠里", "time": "6:37", "district_hint": "南开区", "query": "金冠里 南开区 天津市", "lat": 39.096844, "lon": 117.132284, "coord_source": "manual approximate/fallback", "plate": "津AZ5735", "route_display": "Route 1（津AZ5735）"}, {"route": "Route 1", "station": "佟楼", "time": "6:50", "district_hint": "河西区", "query": "佟楼 河西区 天津市", "lat": 39.098697, "lon": 117.192297, "coord_source": "manual approximate/fallback", "plate": "津AZ5735", "route_display": "Route 1（津AZ5735）"}, {"route": "Route 1", "station": "友谊路", "time": "6:58", "district_hint": "河西区", "query": "友谊路 河西区 天津市", "lat": 39.1026, "lon": 117.205, "coord_source": "manual approximate/fallback", "plate": "津AZ5735", "route_display": "Route 1（津AZ5735）"}, {"route": "Route 1", "station": "南楼", "time": "7:06", "district_hint": "河西区", "query": "南楼 河西区 天津市", "lat": 39.095414, "lon": 117.217518, "coord_source": "manual approximate/fallback", "plate": "津AZ5735", "route_display": "Route 1（津AZ5735）"}, {"route": "Route 1", "station": "历史博物馆", "time": "7:11", "district_hint": "河西区", "query": "历史博物馆 河西区 天津市", "lat": 39.0892, "lon": 117.2086, "coord_source": "manual approximate/fallback", "plate": "津AZ5735", "route_display": "Route 1（津AZ5735）"}, {"route": "Route 1", "station": "中山门2号路", "time": "7:13", "district_hint": "河东区", "query": "中山门2号路 河东区 天津市", "lat": 39.0965, "lon": 117.289, "coord_source": "manual approximate/fallback", "plate": "津AZ5735", "route_display": "Route 1（津AZ5735）"}, {"route": "Route 2", "station": "西横堤地铁站", "time": "6:35", "district_hint": "北辰区", "query": "西横堤地铁站 北辰区 天津市", "lat": 39.1815, "lon": 117.138, "coord_source": "manual approximate/fallback", "plate": "津AX6166", "route_display": "Route 2（津AX6166）"}, {"route": "Route 2", "station": "佳园里", "time": "6:37", "district_hint": "北辰区", "query": "佳园里 北辰区 天津市", "lat": 39.1775, "lon": 117.152, "coord_source": "manual approximate/fallback", "plate": "津AX6166", "route_display": "Route 2（津AX6166）"}, {"route": "Route 2", "station": "天穆骨科医院", "time": "6:47", "district_hint": "北辰区", "query": "天穆骨科医院 北辰区 天津市", "lat": 39.17, "lon": 117.159, "coord_source": "manual approximate/fallback", "plate": "津AX6166", "route_display": "Route 2（津AX6166）"}, {"route": "Route 2", "station": "仓联庄", "time": "6:57", "district_hint": "北辰区", "query": "仓联庄 北辰区 天津市", "lat": 39.167, "lon": 117.187, "coord_source": "manual approximate/fallback", "plate": "津AX6166", "route_display": "Route 2（津AX6166）"}, {"route": "Route 2", "station": "建昌道", "time": "7:02", "district_hint": "河北区", "query": "建昌道 河北区 天津市", "lat": 39.161, "lon": 117.222, "coord_source": "manual approximate/fallback", "plate": "津AX6166", "route_display": "Route 2（津AX6166）"}, {"route": "Route 3", "station": "水游城", "time": "6:50", "district_hint": "南开区", "query": "水游城 南开区 天津市", "lat": 39.1361, "lon": 117.1669, "coord_source": "manual approximate/fallback", "plate": "津AZ9331", "route_display": "Route 3（津AZ9331）"}, {"route": "Route 3", "station": "鼓楼", "time": "6:55", "district_hint": "南开区", "query": "鼓楼 南开区 天津市", "lat": 39.136028, "lon": 117.174861, "coord_source": "manual approximate/fallback", "plate": "津AZ9331", "route_display": "Route 3（津AZ9331）"}, {"route": "Route 3", "station": "民权门桥", "time": "7:12", "district_hint": "河北区", "query": "民权门桥 河北区 天津市", "lat": 39.1625, "lon": 117.239, "coord_source": "manual approximate/fallback", "plate": "津AZ9331", "route_display": "Route 3（津AZ9331）"}, {"route": "Route 3", "station": "桥园里", "time": "7:14", "district_hint": "东丽区", "query": "桥园里 东丽区 天津市", "lat": 39.15, "lon": 117.27, "coord_source": "manual approximate/fallback", "plate": "津AZ9331", "route_display": "Route 3（津AZ9331）"}, {"route": "Route 3", "station": "金钟河大街地铁站", "time": "7:17", "district_hint": "河北区", "query": "金钟河大街地铁站 河北区 天津市", "lat": 39.166, "lon": 117.258, "coord_source": "manual approximate/fallback", "plate": "津AZ9331", "route_display": "Route 3（津AZ9331）"}, {"route": "Route 4", "station": "烈士路", "time": "6:39", "district_hint": "南开区", "query": "烈士路 南开区 天津市", "lat": 39.1358, "lon": 117.1515, "coord_source": "manual approximate/fallback", "plate": "津AZ5729", "route_display": "Route 4（津AZ5729）"}, {"route": "Route 4", "station": "南丰路", "time": "6:47", "district_hint": "南开区", "query": "南丰路 南开区 天津市", "lat": 39.1185, "lon": 117.164, "coord_source": "manual approximate/fallback", "plate": "津AZ5729", "route_display": "Route 4（津AZ5729）"}, {"route": "Route 4", "station": "今晚报大厦", "time": "6:52", "district_hint": "南开区", "query": "今晚报大厦 南开区 天津市", "lat": 39.1227, "lon": 117.176, "coord_source": "manual approximate/fallback", "plate": "津AZ5729", "route_display": "Route 4（津AZ5729）"}, {"route": "Route 4", "station": "耀华中学", "time": "7:02", "district_hint": "和平区", "query": "耀华中学 和平区 天津市", "lat": 39.1175, "lon": 117.19444, "coord_source": "manual approximate/fallback", "plate": "津AZ5729", "route_display": "Route 4（津AZ5729）"}, {"route": "Route 4", "station": "大光明桥公交站", "time": "7:07", "district_hint": "和平区", "query": "大光明桥公交站 和平区 天津市", "lat": 39.124, "lon": 117.2169, "coord_source": "manual approximate/fallback", "plate": "津AZ5729", "route_display": "Route 4（津AZ5729）"}, {"route": "Route 4", "station": "翠阜新村", "time": "7:16", "district_hint": "河东区", "query": "翠阜新村 河东区 天津市", "lat": 39.126, "lon": 117.265, "coord_source": "manual approximate/fallback", "plate": "津AZ5729", "route_display": "Route 4（津AZ5729）"}, {"route": "Route 5", "station": "华苑路站", "time": "6:46", "district_hint": "南开区", "query": "华苑路站 南开区 天津市", "lat": 39.086125, "lon": 117.122244, "coord_source": "manual approximate/fallback", "plate": "津AX6133", "route_display": "Route 5（津AX6133）"}, {"route": "Route 5", "station": "彩虹花园", "time": "6:51", "district_hint": "南开区", "query": "彩虹花园 南开区 天津市", "lat": 39.0804, "lon": 117.1547, "coord_source": "manual approximate/fallback", "plate": "津AX6133", "route_display": "Route 5（津AX6133）"}, {"route": "Route 5", "station": "中石油桥", "time": "6:57", "district_hint": "河西区", "query": "中石油桥 河西区 天津市", "lat": 39.0747, "lon": 117.1815, "coord_source": "manual approximate/fallback", "plate": "津AX6133", "route_display": "Route 5（津AX6133）"}, {"route": "Route 5", "station": "洪泽路", "time": "7:05", "district_hint": "河西区", "query": "洪泽路 河西区 天津市", "lat": 39.0778, "lon": 117.2225, "coord_source": "manual approximate/fallback", "plate": "津AX6133", "route_display": "Route 5（津AX6133）"}, {"route": "Route 5", "station": "崂山道", "time": "7:16", "district_hint": "河东区", "query": "崂山道 河东区 天津市", "lat": 39.106, "lon": 117.284, "coord_source": "manual approximate/fallback", "plate": "津AX6133", "route_display": "Route 5（津AX6133）"}, {"route": "Route 5", "station": "屿东城", "time": "7:19", "district_hint": "东丽区", "query": "屿东城 东丽区 天津市", "lat": 39.112, "lon": 117.333, "coord_source": "manual approximate/fallback", "plate": "津AX6133", "route_display": "Route 5（津AX6133）"}, {"route": "Route 6", "station": "双山里", "time": "6:45", "district_hint": "河西区", "query": "双山里 河西区 天津市", "lat": 39.0552, "lon": 117.2645, "coord_source": "manual approximate/fallback", "plate": "津AZ9383", "route_display": "Route 6（津AZ9383）"}, {"route": "Route 6", "station": "雅致里", "time": "6:50", "district_hint": "河西区", "query": "雅致里 河西区 天津市", "lat": 39.063, "lon": 117.2734, "coord_source": "manual approximate/fallback", "plate": "津AZ9383", "route_display": "Route 6（津AZ9383）"}, {"route": "Route 6", "station": "詹庄子", "time": "7:07", "district_hint": "东丽区", "query": "詹庄子 东丽区 天津市", "lat": 39.095, "lon": 117.32, "coord_source": "manual approximate/fallback", "plate": "津AZ9383", "route_display": "Route 6（津AZ9383）"}, {"route": "Route 7", "station": "田园小区", "time": "6:50", "district_hint": "北辰区", "query": "田园小区 北辰区 天津市", "lat": 39.202, "lon": 117.182, "coord_source": "manual approximate/fallback", "plate": "津AZ5683", "route_display": "Route 7（津AZ5683）"}, {"route": "Route 7", "station": "张兴庄", "time": "6:58", "district_hint": "北辰区", "query": "张兴庄 北辰区 天津市", "lat": 39.198, "lon": 117.218, "coord_source": "manual approximate/fallback", "plate": "津AZ5683", "route_display": "Route 7（津AZ5683）"}, {"route": "Route 7", "station": "正义道公交站", "time": "7:09", "district_hint": "河北区", "query": "正义道公交站 河北区 天津市", "lat": 39.155, "lon": 117.246, "coord_source": "manual approximate/fallback", "plate": "津AZ5683", "route_display": "Route 7（津AZ5683）"}, {"route": "Route 7", "station": "靖江路地铁站", "time": "7:18", "district_hint": "河东区", "query": "靖江路地铁站 河东区 天津市", "lat": 39.136, "lon": 117.259, "coord_source": "manual approximate/fallback", "plate": "津AZ5683", "route_display": "Route 7（津AZ5683）"}, {"route": "Route 7", "station": "于明庄站", "time": "7:26", "district_hint": "东丽区", "query": "于明庄站 东丽区 天津市", "lat": 39.117, "lon": 117.332, "coord_source": "manual approximate/fallback", "plate": "津AZ5683", "route_display": "Route 7（津AZ5683）"}, {"route": "Route 8", "station": "密云路", "time": "6:32", "district_hint": "南开区", "query": "密云路 南开区 天津市", "lat": 39.1328, "lon": 117.1263, "coord_source": "manual approximate/fallback", "plate": "津AZ5736", "route_display": "Route 8（津AZ5736）"}, {"route": "Route 8", "station": "芥园里", "time": "6:34", "district_hint": "南开区", "query": "芥园里 南开区 天津市", "lat": 39.1376, "lon": 117.148, "coord_source": "manual approximate/fallback", "plate": "津AZ5736", "route_display": "Route 8（津AZ5736）"}, {"route": "Route 8", "station": "千禧园", "time": "6:40", "district_hint": "红桥区", "query": "千禧园 红桥区 天津市", "lat": 39.152, "lon": 117.156, "coord_source": "manual approximate/fallback", "plate": "津AZ5736", "route_display": "Route 8（津AZ5736）"}, {"route": "Route 8", "station": "水木天城", "time": "6:42", "district_hint": "红桥区", "query": "水木天城 红桥区 天津市", "lat": 39.154, "lon": 117.166, "coord_source": "manual approximate/fallback", "plate": "津AZ5736", "route_display": "Route 8（津AZ5736）"}, {"route": "Route 8", "station": "光荣道", "time": "6:45", "district_hint": "红桥区", "query": "光荣道 红桥区 天津市", "lat": 39.17, "lon": 117.16, "coord_source": "manual approximate/fallback", "plate": "津AZ5736", "route_display": "Route 8（津AZ5736）"}, {"route": "Route 8", "station": "红桥医院", "time": "6:50", "district_hint": "红桥区", "query": "红桥医院 红桥区 天津市", "lat": 39.159, "lon": 117.165, "coord_source": "manual approximate/fallback", "plate": "津AZ5736", "route_display": "Route 8（津AZ5736）"}, {"route": "Route 8", "station": "勤俭桥", "time": "6:54", "district_hint": "红桥区", "query": "勤俭桥 红桥区 天津市", "lat": 39.166, "lon": 117.174, "coord_source": "manual approximate/fallback", "plate": "津AZ5736", "route_display": "Route 8（津AZ5736）"}, {"route": "Route 8", "station": "白庙", "time": "6:57", "district_hint": "河北区", "query": "白庙 河北区 天津市", "lat": 39.186, "lon": 117.214, "coord_source": "manual approximate/fallback", "plate": "津AZ5736", "route_display": "Route 8（津AZ5736）"}, {"route": "Route 汉沽", "station": "力高理想海公交站", "time": "6:20", "district_hint": "滨海新区", "query": "力高理想海公交站 滨海新区 天津市", "lat": 39.233, "lon": 117.802, "coord_source": "manual approximate/fallback", "plate": "津AZ5781", "route_display": "Route 汉沽（津AZ5781）"}, {"route": "Route 汉沽", "station": "建设路公交站", "time": "6:30", "district_hint": "滨海新区", "query": "建设路公交站 汉沽 滨海新区 天津市", "lat": 39.233, "lon": 117.792, "coord_source": "manual approximate/fallback", "plate": "津AZ5781", "route_display": "Route 汉沽（津AZ5781）"}, {"route": "Route 汉沽", "station": "红霞里公交站", "time": "6:33", "district_hint": "滨海新区", "query": "红霞里公交站 汉沽 滨海新区 天津市", "lat": 39.225, "lon": 117.787, "coord_source": "manual approximate/fallback", "plate": "津AZ5781", "route_display": "Route 汉沽（津AZ5781）"}, {"route": "Route 汉沽", "station": "广播电视公交站", "time": "6:36", "district_hint": "滨海新区", "query": "广播电视公交站 汉沽 滨海新区 天津市", "lat": 39.22, "lon": 117.783, "coord_source": "manual approximate/fallback", "plate": "津AZ5781", "route_display": "Route 汉沽（津AZ5781）"}, {"route": "Route 汉沽", "station": "汉华世家", "time": "6:39", "district_hint": "滨海新区", "query": "汉华世家 汉沽 滨海新区 天津市", "lat": 39.214, "lon": 117.785, "coord_source": "manual approximate/fallback", "plate": "津AZ5781", "route_display": "Route 汉沽（津AZ5781）"}, {"route": "Route 汉沽", "station": "华城公邸", "time": "6:42", "district_hint": "滨海新区", "query": "华城公邸 汉沽 滨海新区 天津市", "lat": 39.21, "lon": 117.79, "coord_source": "manual approximate/fallback", "plate": "津AZ5781", "route_display": "Route 汉沽（津AZ5781）"}, {"route": "Route 汉沽", "station": "法院", "time": "6:46", "district_hint": "滨海新区", "query": "法院 汉沽 滨海新区 天津市", "lat": 39.204, "lon": 117.793, "coord_source": "manual approximate/fallback", "plate": "津AZ5781", "route_display": "Route 汉沽（津AZ5781）"}, {"route": "Route 塘沽", "station": "花园里", "time": "6:45", "district_hint": "滨海新区", "query": "花园里 塘沽 滨海新区 天津市", "lat": 39.034, "lon": 117.652, "coord_source": "manual approximate/fallback", "plate": "津AZ5728", "route_display": "Route 塘沽（津AZ5728）"}, {"route": "Route 塘沽", "station": "宏达公寓", "time": "6:51", "district_hint": "滨海新区", "query": "宏达公寓 塘沽 滨海新区 天津市", "lat": 39.04, "lon": 117.664, "coord_source": "manual approximate/fallback", "plate": "津AZ5728", "route_display": "Route 塘沽（津AZ5728）"}, {"route": "Route 塘沽", "station": "大五金", "time": "6:53", "district_hint": "滨海新区", "query": "大五金 塘沽 滨海新区 天津市", "lat": 39.0415, "lon": 117.676, "coord_source": "manual approximate/fallback", "plate": "津AZ5728", "route_display": "Route 塘沽（津AZ5728）"}, {"route": "Route 塘沽", "station": "众智园", "time": "6:55", "district_hint": "滨海新区", "query": "众智园 塘沽 滨海新区 天津市", "lat": 39.044, "lon": 117.686, "coord_source": "manual approximate/fallback", "plate": "津AZ5728", "route_display": "Route 塘沽（津AZ5728）"}, {"route": "Route 塘沽", "station": "远洋城", "time": "7:07", "district_hint": "滨海新区", "query": "远洋城 塘沽 滨海新区 天津市", "lat": 39.056, "lon": 117.706, "coord_source": "manual approximate/fallback", "plate": "津AZ5728", "route_display": "Route 塘沽（津AZ5728）"}, {"route": "Route 塘沽", "station": "六道沟", "time": "7:10", "district_hint": "滨海新区", "query": "六道沟 塘沽 滨海新区 天津市", "lat": 39.058, "lon": 117.716, "coord_source": "manual approximate/fallback", "plate": "津AZ5728", "route_display": "Route 塘沽（津AZ5728）"}, {"route": "Route 开发区", "station": "生态城健身中心站", "time": "6:17", "district_hint": "滨海新区", "query": "生态城健身中心站 滨海新区 天津市", "lat": 39.176, "lon": 117.788, "coord_source": "manual approximate/fallback", "plate": "津AZ5685", "route_display": "Route 开发区（津AZ5685）"}, {"route": "Route 开发区", "station": "宝龙城公交站", "time": "6:31", "district_hint": "滨海新区", "query": "宝龙城公交站 滨海新区 天津市", "lat": 39.112, "lon": 117.781, "coord_source": "manual approximate/fallback", "plate": "津AZ5685", "route_display": "Route 开发区（津AZ5685）"}, {"route": "Route 开发区", "station": "太湖路地铁站", "time": "6:53", "district_hint": "滨海新区", "query": "太湖路地铁站 滨海新区 天津市", "lat": 39.03, "lon": 117.708, "coord_source": "manual approximate/fallback", "plate": "津AZ5685", "route_display": "Route 开发区（津AZ5685）"}, {"route": "Route 开发区", "station": "泰达足球场公交站", "time": "6:57", "district_hint": "滨海新区", "query": "泰达足球场公交站 滨海新区 天津市", "lat": 38.998, "lon": 117.703, "coord_source": "manual approximate/fallback", "plate": "津AZ5685", "route_display": "Route 开发区（津AZ5685）"}, {"route": "Route 开发区", "station": "河北路鸿起顺", "time": "7:11", "district_hint": "滨海新区", "query": "河北路鸿起顺 滨海新区 天津市", "lat": 39.028, "lon": 117.669, "coord_source": "manual approximate/fallback", "plate": "津AZ5685", "route_display": "Route 开发区（津AZ5685）"}, {"route": "Route 开发区", "station": "桃园官邸公交站", "time": "7:18", "district_hint": "滨海新区", "query": "桃园官邸公交站 滨海新区 天津市", "lat": 39.021, "lon": 117.653, "coord_source": "manual approximate/fallback", "plate": "津AZ5685", "route_display": "Route 开发区（津AZ5685）"}, {"route": "Route 空港华明", "station": "华明镇（德园公交站）", "time": "7:10", "district_hint": "东丽区", "query": "华明镇 德园公交站 东丽区 天津市", "lat": 39.149, "lon": 117.431, "coord_source": "manual approximate/fallback", "plate": "津AZ5662", "route_display": "Route 空港华明（津AZ5662）"}, {"route": "Route 空港华明", "station": "华明镇（泽园公交站）", "time": "7:15", "district_hint": "东丽区", "query": "华明镇 泽园公交站 东丽区 天津市", "lat": 39.152, "lon": 117.439, "coord_source": "manual approximate/fallback", "plate": "津AZ5662", "route_display": "Route 空港华明（津AZ5662）"}, {"route": "Route 空港华明", "station": "东七道航宇路", "time": "7:35", "district_hint": "东丽区", "query": "东七道航宇路 东丽区 天津市", "lat": 39.165, "lon": 117.456, "coord_source": "manual approximate/fallback", "plate": "津AZ5662", "route_display": "Route 空港华明（津AZ5662）"}, {"route": "Route 1", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AZ5735", "route_display": "Route 1（津AZ5735）"}, {"route": "Route 2", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AX6166", "route_display": "Route 2（津AX6166）"}, {"route": "Route 3", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AZ9331", "route_display": "Route 3（津AZ9331）"}, {"route": "Route 4", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AZ5729", "route_display": "Route 4（津AZ5729）"}, {"route": "Route 5", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AX6133", "route_display": "Route 5（津AX6133）"}, {"route": "Route 6", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AZ9383", "route_display": "Route 6（津AZ9383）"}, {"route": "Route 7", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AZ5683", "route_display": "Route 7（津AZ5683）"}, {"route": "Route 8", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AZ5736", "route_display": "Route 8（津AZ5736）"}, {"route": "Route 汉沽", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AZ5781", "route_display": "Route 汉沽（津AZ5781）"}, {"route": "Route 塘沽", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AZ5728", "route_display": "Route 塘沽（津AZ5728）"}, {"route": "Route 开发区", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AZ5685", "route_display": "Route 开发区（津AZ5685）"}, {"route": "Route 空港华明", "station": "CTL", "time": "7:50", "district_hint": "东丽区", "query": "卡特彼勒(天津)有限公司", "lat": 39.118, "lon": 117.453, "coord_source": "shared terminal (approx.)", "plate": "津AZ5662", "route_display": "Route 空港华明（津AZ5662）"}];
+const routeColors = {"Route 1": "#d73027", "Route 2": "#fc8d59", "Route 3": "#1a9850", "Route 4": "#4575b4", "Route 5": "#7b3294", "Route 6": "#4d908e", "Route 7": "#8c1d18", "Route 8": "#2b9348", "Route 汉沽": "#6a4c93", "Route 塘沽": "#277da1", "Route 开发区": "#f8961e", "Route 空港华明": "#222222"};
+const routeDisplay = {"Route 1": "Route 1（津AZ5735）", "Route 2": "Route 2（津AX6166）", "Route 3": "Route 3（津AZ9331）", "Route 4": "Route 4（津AZ5729）", "Route 5": "Route 5（津AX6133）", "Route 6": "Route 6（津AZ9383）", "Route 7": "Route 7（津AZ5683）", "Route 8": "Route 8（津AZ5736）", "Route 汉沽": "Route 汉沽（津AZ5781）", "Route 塘沽": "Route 塘沽（津AZ5728）", "Route 开发区": "Route 开发区（津AZ5685）", "Route 空港华明": "Route 空港华明（津AZ5662）"};
+const routeNames = ["Route 1", "Route 2", "Route 3", "Route 4", "Route 5", "Route 6", "Route 7", "Route 8", "Route 汉沽", "Route 塘沽", "Route 开发区", "Route 空港华明"];
+const ctl = {"station": "CTL（卡特彼勒<天津>有限公司）", "short": "CTL", "time": "7:50", "district_hint": "东丽区", "lat": 39.118, "lon": 117.453, "address": "中国天津市东丽区中新大道55号附近（近似定位）"};
+
+const map = L.map('map', { zoomControl: true }).setView([39.125, 117.25], 10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18,
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+const routeLayers = {};
+const routeLatLngs = {};
+const routeMarkers = {};
+const labelRefs = [];
+let labelsVisible = true;
+let currentFilter = 'ALL';
+
+routeNames.forEach(r => {
+  routeLayers[r] = L.layerGroup().addTo(map);
+  routeLatLngs[r] = [];
+  routeMarkers[r] = [];
+});
+
+function escapeHtml(text) {
+  text = String(text ?? '');
+  return text.replace(/[&<>"']/g, function(m) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
+  });
+}
+
+function addStationMarker(st) {
+  const color = routeColors[st.route] || 'gray';
+  const lat = parseFloat(st.lat), lon = parseFloat(st.lon);
+  if (Number.isNaN(lat) || Number.isNaN(lon)) return;
+
+  const marker = L.circleMarker([lat, lon], {
+    radius: 6,
+    color: color,
+    fillColor: color,
+    fillOpacity: 0.92,
+    weight: 2
+  }).addTo(routeLayers[st.route]);
+
+  const popup = `<b>${escapeHtml(st.station)}</b><br>` +
+                `线路：${escapeHtml(st.route_display || routeDisplay[st.route])}<br>` +
+                `车牌号：${escapeHtml(st.plate || '')}<br>` +
+                `到站时间：${escapeHtml(st.time)}<br>` +
+                `区域：${escapeHtml(st.district_hint)}`;
+  marker.bindPopup(popup);
+  marker.bindTooltip(escapeHtml(st.station), {
+    permanent: true,
+    direction: 'right',
+    offset: [8, 0],
+    opacity: 0.95,
+    className: 'station-label'
+  });
+  routeLatLngs[st.route].push([lat, lon]);
+  routeMarkers[st.route].push(marker);
+  labelRefs.push(marker);
+}
+
+stationData.forEach(st => addStationMarker(st));
+
+const ctlMarker = L.circleMarker([ctl.lat, ctl.lon], {
+  radius: 9,
+  color: '#000',
+  fillColor: '#ffd54f',
+  fillOpacity: 0.98,
+  weight: 3
+}).addTo(map);
+ctlMarker.bindPopup(`<b>${escapeHtml(ctl.station)}</b><br>终点站<br>${escapeHtml(ctl.address)}<br>时间：${escapeHtml(ctl.time)}`);
+ctlMarker.bindTooltip('CTL', { permanent: true, direction: 'right', offset: [10, 0], opacity: 0.98, className: 'ctl-label' });
+
+routeNames.forEach(route => {
+  const pts = routeLatLngs[route];
+  if (pts.length >= 1) {
+    const extended = pts.concat([[ctl.lat, ctl.lon]]);
+    const line = L.polyline(extended, { color: routeColors[route], weight: 2.8, opacity: 0.62 }).addTo(routeLayers[route]);
+    routeMarkers[route].push(line);
+  }
+});
+
+function fitAll() {
+  let allKnown = stationData.filter(s => s.lat !== '' && s.lon !== '').map(s => [parseFloat(s.lat), parseFloat(s.lon)]);
+  allKnown.push([ctl.lat, ctl.lon]);
+  if (allKnown.length > 1) map.fitBounds(allKnown, { padding: [30, 30] });
+}
+fitAll();
+
+function renderStationList(filter='ALL') {
+  const listEl = document.getElementById('stationList');
+  const rows = stationData.filter(st => filter === 'ALL' || st.route === filter);
+  listEl.innerHTML = rows.map((st, idx) => `
+    <div class="station-item">
+      <div><b>${escapeHtml(st.station)}</b></div>
+      <div class="meta">${escapeHtml(st.route_display || routeDisplay[st.route])}<br>到站：${escapeHtml(st.time)} ｜ 区域：${escapeHtml(st.district_hint)} ｜ 车牌：${escapeHtml(st.plate || '')}</div>
+    </div>
+  `).join('');
+}
+renderStationList();
+
+function renderRouteChips() {
+  const chipWrap = document.getElementById('routeChips');
+  const chips = [`<button class="chip" data-route="ALL">全部</button>`].concat(routeNames.map(r => `<button class="chip" data-route="${escapeHtml(r)}">${escapeHtml(routeDisplay[r])}</button>`));
+  chipWrap.innerHTML = chips.join('');
+  chipWrap.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const route = btn.getAttribute('data-route');
+      currentFilter = route;
+      routeNames.forEach(r => {
+        if (route === 'ALL' || r === route) {
+          if (!map.hasLayer(routeLayers[r])) routeLayers[r].addTo(map);
+        } else {
+          if (map.hasLayer(routeLayers[r])) map.removeLayer(routeLayers[r]);
+        }
+      });
+      renderStationList(route);
+      if (route === 'ALL') {
+        fitAll();
+      } else {
+        const pts = routeLatLngs[route].slice();
+        pts.push([ctl.lat, ctl.lon]);
+        if (pts.length > 1) map.fitBounds(pts, { padding: [30, 30] });
+      }
+    });
+  });
+}
+renderRouteChips();
+
+const panel = document.getElementById('panel');
+const panelHeader = document.getElementById('panelHeader');
+const togglePanelBtn = document.getElementById('togglePanelBtn');
+function togglePanel() {
+  panel.classList.toggle('open');
+  togglePanelBtn.textContent = panel.classList.contains('open') ? '收起信息面板' : '展开信息面板';
+}
+panelHeader.addEventListener('click', () => { if (window.innerWidth < 860) togglePanel(); });
+togglePanelBtn.addEventListener('click', togglePanel);
+if (window.innerWidth >= 860) panel.classList.add('open');
+
+const toggleLabelsBtn = document.getElementById('toggleLabelsBtn');
+toggleLabelsBtn.addEventListener('click', () => {
+  labelsVisible = !labelsVisible;
+  labelRefs.forEach(m => {
+    if (labelsVisible) m.openTooltip();
+    else m.closeTooltip();
+  });
+  if (labelsVisible) ctlMarker.openTooltip(); else ctlMarker.closeTooltip();
+  toggleLabelsBtn.textContent = labelsVisible ? '隐藏站点名称' : '显示站点名称';
+});
+
+const fitBtn = document.getElementById('fitBtn');
+fitBtn.addEventListener('click', () => {
+  if (currentFilter === 'ALL') fitAll();
+  else {
+    const pts = routeLatLngs[currentFilter].slice();
+    pts.push([ctl.lat, ctl.lon]);
+    if (pts.length > 1) map.fitBounds(pts, { padding: [30, 30] });
+  }
+});
+</script>
+</body>
+</html>
